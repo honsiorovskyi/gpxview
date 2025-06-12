@@ -1,0 +1,34 @@
+{
+  "name": "gpx-viewer",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "css-loader": "^6.8.1",
+    "mini-css-extract-plugin": "^2.7.6",
+    "style-loader": "^3.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "@raruto/leaflet-elevation": "^2.2.1",
+    "@tmcw/togeojson": "^7.1.2",
+    "d3": "^7.9.0",
+    "leaflet": "^1.9.4",
+    "leaflet-almostover": "^1.0.1",
+    "leaflet-geometryutil": "^0.10.3"
+  },
+  "keywords": [
+    "gpx",
+    "leaflet",
+    "elevation",
+    "viewer"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "GPX file viewer with elevation profile"
+}

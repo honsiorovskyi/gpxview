@@ -5,8 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPX Viewer</title>
     
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Favicons -->
+    <link rel="icon" href="favicon.ico" sizes="16x16 32x32">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon-32x32.png" sizes="32x32" type="image/png">
+    <link rel="apple-touch-icon" href="favicon-32x32.png">
+    
+    <!-- Bundled CSS -->
+    <link rel="stylesheet" href="dist/bundle.css" />
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="styles.css">
@@ -28,42 +34,46 @@
         </label>
     </div>
     
-    <div id="track-info" class="track-info hidden">
+    <div id="track-info" class="track-info">
         <div class="track-info-header">
             <h3>Track Information</h3>
-            <button id="toggle-track-info" class="toggle-button">−</button>
+            <div class="header-buttons">
+                <button id="expand-track-info" class="expand-button" title="Expand to full screen">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                    </svg>
+                </button>
+                <button id="toggle-track-info" class="toggle-button">−</button>
+            </div>
         </div>
-        <div id="track-stats" class="track-stats-content"></div>
-        <div id="elevation-profile" class="elevation-profile">
-            <h4>Elevation Profile</h4>
-            <canvas id="elevation-canvas" width="260" height="120"></canvas>
+        <div class="track-info-content">
+            <div id="track-stats" class="track-stats-content"></div>
+            <div id="elevation-profile" class="elevation-profile">
+                <div id="elevation-chart"></div>
+            </div>
         </div>
-        <div class="track-actions">
-            <a id="download-gpx" class="download-link" href="#" download="track.gpx">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7,10 12,15 17,10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                Download GPX
-            </a>
-            <button id="copy-url" class="copy-url-button">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                </svg>
-                Copy URL
-            </button>
+        <div class="track-info-footer">
+            <div class="track-actions">
+                <a id="download-gpx" class="download-link" href="#" download="track.gpx">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7,10 12,15 17,10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Download GPX
+                </a>
+                <button id="copy-url" class="copy-url-button">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                    </svg>
+                    Copy URL
+                </button>
+            </div>
         </div>
     </div>
 
-    <!-- Leaflet JavaScript -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <!-- Leaflet GPX Plugin -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
-    
-    <!-- Custom JavaScript -->
-    <script src="app.js"></script>
+    <!-- Bundled JavaScript -->
+    <script src="dist/bundle.js"></script>
 </body>
 </html>

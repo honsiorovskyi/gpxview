@@ -1,99 +1,18 @@
-class TrackData {
-    constructor(gpxObject, rawGPXData, fileName) {
-        this.gpxObject = gpxObject;
-        this.rawGPXData = rawGPXData;
-        this.fileName = fileName;
-        this.statistics = {};
-        this.elevationData = [];
-        this.waypoints = [];
-        
-        this.extractTrackData();
-    }
-    
-    extractTrackData() {
-        if (!this.gpxObject) return;
-        
-        // Extract basic statistics
-        this.statistics = {
-            distance: this.gpxObject.get_distance ? this.gpxObject.get_distance() : null,
-            minElevation: this.gpxObject.get_elevation_min ? this.gpxObject.get_elevation_min() : null,
-            maxElevation: this.gpxObject.get_elevation_max ? this.gpxObject.get_elevation_max() : null,
-            elevationGain: this.gpxObject.get_elevation_gain ? this.gpxObject.get_elevation_gain() : null,
-            elevationLoss: this.gpxObject.get_elevation_loss ? this.gpxObject.get_elevation_loss() : null,
-            movingTime: this.gpxObject.get_moving_time ? this.gpxObject.get_moving_time() : null
-        };
-        
-        // Extract waypoints
-        this.waypoints = this.gpxObject.get_waypoints ? this.gpxObject.get_waypoints() : [];
-        
-        // Extract elevation data
-        this.elevationData = this.extractElevationData();
-    }
-    
-    extractElevationData() {
-        try {
-            if (this.gpxObject.get_elevation_data && typeof this.gpxObject.get_elevation_data === 'function') {
-                const eleData = this.gpxObject.get_elevation_data();
-                
-                if (eleData && eleData.length > 0) {
-                    // The get_elevation_data() returns an array of [distance, elevation, tooltip]
-                    const result = eleData.map((point, index) => ({
-                        index: index,
-                        distance: point[0], // distance from start in meters
-                        elevation: parseFloat(point[1]) // elevation in meters
-                    }));
-                    
-                    // Sample data if too many points (for performance)
-                    if (result.length > 200) {
-                        const step = Math.ceil(result.length / 200);
-                        return result.filter((_, index) => index % step === 0);
-                    }
-                    
-                    return result;
-                }
-            }
-            
-            return [];
-        } catch (error) {
-            console.error('Error getting elevation data:', error);
-            return [];
-        }
-    }
-    
-    hasElevationData() {
-        return this.elevationData.length > 0;
-    }
-    
-    getFormattedDistance() {
-        return this.statistics.distance ? (this.statistics.distance / 1000).toFixed(2) : null;
-    }
-    
-    getFormattedMovingTime() {
-        if (!this.statistics.movingTime) return null;
-        
-        const hours = Math.floor(this.statistics.movingTime / 3600);
-        const minutes = Math.floor((this.statistics.movingTime % 3600) / 60);
-        
-        if (hours > 0) {
-            return `${hours}h ${minutes}m`;
-        } else {
-            return `${minutes}m`;
-        }
-    }
-}
-
 class GPXViewer {
     constructor() {
         this.map = null;
         this.currentGPXLayer = null;
         this.currentTrackData = null;
+        this.elevationControl = null;
         this.init();
     }
 
     init() {
         this.initMap();
+        this.initElevationControl();
         this.setupEventListeners();
         this.loadFromURL();
+        this.loadSampleGPX();
     }
 
     initMap() {
@@ -105,6 +24,72 @@ class GPXViewer {
         }).addTo(this.map);
     }
 
+    initElevationControl() {
+        // Create elevation control once
+        this.elevationControl = L.control.elevation({
+            theme: "lime-theme",
+            elevationDiv: "#elevation-chart",
+            collapsed: false,
+            detached: true,
+            ruler: true,
+            legend: true,
+            summary: false,
+            closeBtn: false,
+            distanceMarkers: true,
+            hotline: true,
+        });
+        
+
+        // Setup chart resizing
+        this.setupChartResize();
+
+        // Patch hotline styling by overriding the _initHotLine method
+        const originalInitHotLine = this.elevationControl._initHotLine;
+        this.elevationControl._initHotLine = function(layer) {
+            let prop = typeof this.options.hotline == 'string' ? this.options.hotline : 'elevation';
+            return this.options.hotline ? this.import(this.__LHOTLINE)
+                .then(() => {
+                    layer.eachLayer((trkseg) => {
+                        if (trkseg.feature.geometry.type != "Point") {
+                            let geo = L.geoJson(trkseg.toGeoJSON(), { coordsToLatLng: (coords) => L.latLng(coords[0], coords[1], coords[2] * (this.options.altitudeFactor || 1))});
+                            let line = L.hotline(geo.toGeoJSON().features[0].geometry.coordinates, {
+                                renderer: L.Hotline.renderer(),
+                                min: isFinite(this.track_info[prop + '_min']) ? this.track_info[prop + '_min'] : 0,
+                                max: isFinite(this.track_info[prop + '_max']) ? this.track_info[prop + '_max'] : 1,
+                                palette: {
+                                    0.0: '#008800',
+                                    0.5: '#ffff00',
+                                    1.0: '#ff0000'
+                                },
+                                weight: 4,
+                                outlineColor: '#000000',
+                                outlineWidth: 2
+                            }).addTo(this._hotline);
+                            let alpha = trkseg.options.style && trkseg.options.style.opacity || 1;
+                            trkseg.on('add remove', ({type}) => {
+                                trkseg.setStyle({opacity: (type == 'add' ? 0 : alpha)});
+                                line[(type == 'add' ? 'addTo' : 'removeFrom')](trkseg._map);
+                                if (line._renderer) line._renderer._container.parentElement.insertBefore(line._renderer._container, line._renderer._container.parentElement.firstChild);
+                            });
+                        }
+                    });
+                }) : Promise.resolve();
+        };
+
+        // Add elevation control to map once
+        this.elevationControl.addTo(this.map);
+
+        // Setup event listeners for elevation control
+        this.elevationControl.on('eledata_loaded', (e) => {
+            const track = e.layer;
+            if (track) {
+                this.currentGPXLayer = track;
+                this.map.fitBounds(track.getBounds(), { padding: [20, 20] });
+                this.setupDownloadLink();
+            }
+        });
+    }
+
     setupEventListeners() {
         const fileInput = document.getElementById('gpx-file');
         fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
@@ -113,6 +98,12 @@ class GPXViewer {
         toggleButton.addEventListener('click', (e) => {
             e.stopPropagation();
             this.toggleTrackInfo();
+        });
+        
+        const expandButton = document.getElementById('expand-track-info');
+        expandButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleFullscreen();
         });
         
         const trackInfo = document.getElementById('track-info');
@@ -165,101 +156,46 @@ class GPXViewer {
         }
     }
 
+    async loadSampleGPX() {
+        // Only load sample if no URL hash is present
+        if (window.location.hash) return;
+        
+        try {
+            const response = await fetch('./sample.gpx');
+            if (response.ok) {
+                const gpxData = await response.text();
+                this.loadGPX(gpxData, 'sample.gpx');
+            }
+        } catch (error) {
+            console.log('Sample GPX not found or failed to load:', error);
+        }
+    }
+
     loadGPX(gpxData, fileName = 'track.gpx') {
         this.hideError();
-        this.hideTrackInfo();
-
-        if (this.currentGPXLayer) {
-            this.map.removeLayer(this.currentGPXLayer);
-        }
 
         try {
-            this.currentGPXLayer = new L.GPX(gpxData, {
-                async: true,
-                marker_options: {
-                    startIconUrl: null,
-                    endIconUrl: null,
-                    shadowUrl: null,
-                    wptIconUrls: {
-                        '': 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png'
-                    }
-                },
-                polyline_options: {
-                    color: '#3498db',
-                    weight: 4,
-                    opacity: 0.8
-                }
-            });
+            // Clear existing track data completely
+            this.elevationControl.clear();
+            if (this.elevationControl.layer) {
+                this.elevationControl.layer.remove();
+            }
 
-            this.currentGPXLayer.on('loaded', (e) => {
-                const gpx = e.target;
-                this.map.fitBounds(gpx.getBounds(), { padding: [20, 20] });
-                
-                // Create TrackData instance with parsed GPX data
-                this.currentTrackData = new TrackData(gpx, gpxData, fileName);
-                this.displayTrackInfo();
-            });
+            // Store GPX data for sharing/downloading
+            this.currentTrackData = {
+                rawGPXData: gpxData,
+                fileName: fileName,
+                elevationControl: this.elevationControl
+            };
 
-            this.currentGPXLayer.on('error', (e) => {
-                this.showError('Error loading GPX data: ' + e.err);
-            });
-
-            this.currentGPXLayer.addTo(this.map);
+            // Load GPX data into existing elevation control
+            this.elevationControl.load(gpxData);
 
         } catch (error) {
             this.showError('Error parsing GPX file: ' + error.message);
         }
     }
 
-    displayTrackInfo() {
-        if (!this.currentTrackData) return;
-        
-        const trackInfo = document.getElementById('track-info');
-        const trackStats = document.getElementById('track-stats');
-        const toggleButton = document.getElementById('toggle-track-info');
-        
-        let statsHTML = '';
-        
-        // Distance
-        const distance = this.currentTrackData.getFormattedDistance();
-        if (distance) {
-            statsHTML += `<div><strong>Distance:</strong> ${distance} km</div>`;
-        }
-        
-        // Elevation data
-        if (this.currentTrackData.statistics.minElevation !== null && this.currentTrackData.statistics.maxElevation !== null) {
-            statsHTML += `<div><strong>Min Elevation:</strong> ${this.currentTrackData.statistics.minElevation.toFixed(0)} m</div>`;
-            statsHTML += `<div><strong>Max Elevation:</strong> ${this.currentTrackData.statistics.maxElevation.toFixed(0)} m</div>`;
-            
-            if (this.currentTrackData.statistics.elevationGain !== null) {
-                statsHTML += `<div><strong>Elevation Gain:</strong> ${this.currentTrackData.statistics.elevationGain.toFixed(0)} m</div>`;
-            }
-
-            if (this.currentTrackData.statistics.elevationLoss !== null) {
-                statsHTML += `<div><strong>Elevation Loss:</strong> ${this.currentTrackData.statistics.elevationLoss.toFixed(0)} m</div>`;
-            }
-        }
-        
-        // Moving time
-        const movingTime = this.currentTrackData.getFormattedMovingTime();
-        if (movingTime) {
-            statsHTML += `<div><strong>Moving Time:</strong> ${movingTime}</div>`;
-        }
-
-        // Waypoints
-        if (this.currentTrackData.waypoints.length > 0) {
-            statsHTML += `<div><strong>Waypoints:</strong> ${this.currentTrackData.waypoints.length}</div>`;
-        }
-
-        if (statsHTML) {
-            trackStats.innerHTML = statsHTML;
-            trackInfo.classList.remove('hidden');
-            trackInfo.classList.add('collapsed');
-            toggleButton.textContent = '+';
-            this.setupDownloadLink();
-            this.updateElevationProfile();
-        }
-    }
 
     showError(message) {
         const errorDiv = document.getElementById('error-message');
@@ -276,10 +212,6 @@ class GPXViewer {
         errorDiv.classList.add('hidden');
     }
 
-    hideTrackInfo() {
-        const trackInfo = document.getElementById('track-info');
-        trackInfo.classList.add('hidden');
-    }
 
     toggleTrackInfo() {
         const trackInfo = document.getElementById('track-info');
@@ -291,8 +223,41 @@ class GPXViewer {
             toggleButton.textContent = '+';
         } else {
             toggleButton.textContent = '−';
-            // Re-render elevation profile when expanding (if it was hidden)
-            this.renderElevationProfile();
+        }
+    }
+
+    toggleFullscreen() {
+        const trackInfo = document.getElementById('track-info');
+        const expandButton = document.getElementById('expand-track-info');
+        
+        if (!trackInfo.classList.contains('fullscreen')) {
+            // Entering fullscreen - immediate transition
+            trackInfo.classList.add('fullscreen');
+            
+            // Update expand button to show "minimize" icon
+            expandButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 14h6v6"></path>
+                    <path d="M20 10h-6V4"></path>
+                    <path d="M14 10l7-7"></path>
+                    <path d="M3 21l7-7"></path>
+                </svg>
+            `;
+            expandButton.title = "Exit full screen";
+            
+            // Remove collapsed state if it was set
+            trackInfo.classList.remove('collapsed');
+            document.getElementById('toggle-track-info').textContent = '−';
+        } else {
+            // Update expand button to show "expand" icon
+            expandButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                </svg>
+            `;
+            expandButton.title = "Expand to full screen";
+
+            trackInfo.classList.remove('fullscreen');
         }
     }
 
@@ -316,7 +281,6 @@ class GPXViewer {
         if (!this.currentTrackData || !this.currentTrackData.rawGPXData) return;
         
         const copyButton = document.getElementById('copy-url');
-        const originalText = copyButton.textContent;
         
         try {
             // Encode GPX data as base64
@@ -374,135 +338,54 @@ class GPXViewer {
         }
     }
 
-    updateElevationProfile() {
-        if (!this.currentTrackData) return;
-        
-        // Only render if track info is expanded and elevation data exists
-        if (!document.getElementById('track-info').classList.contains('collapsed') && 
-            this.currentTrackData.hasElevationData()) {
-            this.renderElevationProfile();
-        } else if (!this.currentTrackData.hasElevationData()) {
-            // Hide elevation profile if no elevation data
-            document.getElementById('elevation-profile').classList.add('hidden');
-        } else {
-            // Show elevation section but don't render canvas until expanded
-            document.getElementById('elevation-profile').classList.remove('hidden');
+    setupChartResize() {
+        const container = document.getElementById('elevation-chart');
+        if (!container) return;
+
+        // Setup ResizeObserver for dynamic resizing
+        if (this.chartResizeObserver) {
+            this.chartResizeObserver.disconnect();
         }
+
+        this.chartResizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                const { width, height } = entry.contentRect;
+                if (width > 0 && height > 0 && this.elevationControl && this.elevationControl._chart) {
+                    // Debounce resize calls
+                    clearTimeout(this.resizeTimeout);
+                    this.resizeTimeout = setTimeout(() => {
+                        this.resizeChart();
+                    }, 0);
+                }
+            }
+        });
+
+        this.chartResizeObserver.observe(container);
+
+        // Trigger initial resize
+        this.resizeChart()
     }
 
-    renderElevationProfile() {
-        if (!this.currentTrackData || !this.currentTrackData.hasElevationData()) {
-            document.getElementById('elevation-profile').classList.add('hidden');
-            return;
-        }
-        
-        this.createElevationProfile(this.currentTrackData.elevationData);
-    }
+    resizeChart() {
+        if (!this.elevationControl) return;
 
-    createElevationProfile(elevationData) {
-        try {
-            const canvas = document.getElementById('elevation-canvas');
-            const ctx = canvas.getContext('2d');
-            const profileDiv = document.getElementById('elevation-profile');
+        const container = document.getElementById('elevation-chart');
+        if (!container) return;
+
+
+
+        const rect = container.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+            console.log('Resizing elevation chart to:', rect.width, 'x', rect.height);
+
+            // Update elevation control options
+            this.elevationControl.options.width = rect.width;
+            this.elevationControl.options.height = rect.height;
             
-            if (elevationData.length === 0) {
-                profileDiv.classList.add('hidden');
-                return;
-            }
-            
-            profileDiv.classList.remove('hidden');
-            
-            // Set canvas size
-            const width = canvas.width;
-            const height = canvas.height;
-            const padding = 20;
-            
-            // Clear canvas
-            ctx.clearRect(0, 0, width, height);
-            
-            // Find min/max elevations
-            const elevations = elevationData.map(point => point.elevation);
-            const minEle = Math.min(...elevations);
-            const maxEle = Math.max(...elevations);
-            const eleRange = maxEle - minEle;
-            
-            if (eleRange === 0) {
-                profileDiv.classList.add('hidden');
-                return;
-            }
-            
-            // Draw background
-            ctx.fillStyle = '#f8f9fa';
-            ctx.fillRect(0, 0, width, height);
-            
-            // Draw grid lines
-            ctx.strokeStyle = '#e9ecef';
-            ctx.lineWidth = 1;
-            
-            // Horizontal grid lines
-            for (let i = 1; i < 4; i++) {
-                const y = padding + (height - 2 * padding) * i / 4;
-                ctx.beginPath();
-                ctx.moveTo(padding, y);
-                ctx.lineTo(width - padding, y);
-                ctx.stroke();
-            }
-            
-            // Calculate points
-            const graphWidth = width - 2 * padding;
-            const graphHeight = height - 2 * padding;
-            
-            const points = elevationData.map((point, index) => ({
-                x: padding + (graphWidth * index) / (elevationData.length - 1),
-                y: padding + graphHeight - ((point.elevation - minEle) / eleRange) * graphHeight
-            }));
-            
-            // Draw elevation line
-            ctx.strokeStyle = '#3498db';
-            ctx.lineWidth = 2;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            
-            ctx.beginPath();
-            ctx.moveTo(points[0].x, points[0].y);
-            
-            for (let i = 1; i < points.length; i++) {
-                ctx.lineTo(points[i].x, points[i].y);
-            }
-            
-            ctx.stroke();
-            
-            // Fill area under the curve
-            ctx.fillStyle = 'rgba(52, 152, 219, 0.1)';
-            ctx.beginPath();
-            ctx.moveTo(points[0].x, height - padding);
-            ctx.lineTo(points[0].x, points[0].y);
-            
-            for (let i = 1; i < points.length; i++) {
-                ctx.lineTo(points[i].x, points[i].y);
-            }
-            
-            ctx.lineTo(points[points.length - 1].x, height - padding);
-            ctx.closePath();
-            ctx.fill();
-            
-            // Draw elevation labels
-            ctx.fillStyle = '#6c757d';
-            ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.textAlign = 'right';
-            
-            // Min elevation
-            ctx.fillText(`${minEle.toFixed(0)}m`, width - padding - 5, height - padding - 5);
-            
-            // Max elevation
-            ctx.fillText(`${maxEle.toFixed(0)}m`, width - padding - 5, padding + 12);
-            
-        } catch (error) {
-            console.error('Error creating elevation profile:', error);
-            document.getElementById('elevation-profile').classList.add('hidden');
+            // Use the plugin's built-in redraw method
+            this.elevationControl.redraw();
         }
     }
-
 }
 
 document.addEventListener('DOMContentLoaded', () => {
