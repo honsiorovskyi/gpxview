@@ -40,6 +40,9 @@ class GPXViewer {
             }
         });
         
+        const copyUrlButton = document.getElementById('copy-url');
+        copyUrlButton.addEventListener('click', () => this.copyURL());
+        
         window.addEventListener('hashchange', () => this.loadFromURL());
     }
 
@@ -221,6 +224,68 @@ class GPXViewer {
             downloadLink.addEventListener('click', () => {
                 setTimeout(() => URL.revokeObjectURL(url), 100);
             });
+        }
+    }
+
+    async copyURL() {
+        if (!this.currentGPXData) return;
+        
+        const copyButton = document.getElementById('copy-url');
+        const originalText = copyButton.textContent;
+        
+        try {
+            // Encode GPX data as base64
+            const base64Data = btoa(unescape(encodeURIComponent(this.currentGPXData)));
+            
+            // Create the shareable URL
+            const baseUrl = window.location.origin + window.location.pathname;
+            const shareableUrl = `${baseUrl}#gpx=${base64Data}`;
+            
+            // Copy to clipboard
+            await navigator.clipboard.writeText(shareableUrl);
+            
+            // Show success feedback
+            copyButton.classList.add('copied');
+            copyButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20,6 9,17 4,12"></polyline>
+                </svg>
+                Copied!
+            `;
+            
+            // Reset after 2 seconds
+            setTimeout(() => {
+                copyButton.classList.remove('copied');
+                copyButton.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                    </svg>
+                    Copy URL
+                `;
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Failed to copy URL:', error);
+            // Show error feedback
+            copyButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                Failed
+            `;
+            
+            setTimeout(() => {
+                copyButton.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                    </svg>
+                    Copy URL
+                `;
+            }, 2000);
         }
     }
 }
