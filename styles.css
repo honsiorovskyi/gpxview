@@ -127,6 +127,26 @@ body {
     transition: all 0.2s ease;
 }
 
+.elevation-profile {
+    padding: 0 1rem 1rem 1rem;
+    transition: all 0.2s ease;
+}
+
+.elevation-profile h4 {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.9rem;
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.elevation-profile canvas {
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
 .track-actions {
     padding: 0.75rem 1rem;
     border-top: 1px solid #e9ecef;
@@ -199,6 +219,10 @@ body {
 }
 
 .track-info.collapsed .track-actions {
+    display: none;
+}
+
+.track-info.collapsed .elevation-profile {
     display: none;
 }
 
