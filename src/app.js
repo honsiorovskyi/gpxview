@@ -3,7 +3,15 @@ class GPXViewer {
         this.map = null;
         this.currentGPXLayer = null;
         this.currentTrackData = null;
+        this.currentTrackInfo = null;
+        this.currentTrackName = null;
         this.elevationControl = null;
+        this.tileLayers = {};
+        this.currentLayer = 'osm';
+        this.elevationPanelVisible = false;
+        this.elevationPanelHeight = this.loadPanelHeight();
+        this.isResizing = false;
+        this.resizeHandlers = null; // Store handlers to avoid duplicates
         this.init();
     }
 
@@ -11,17 +19,64 @@ class GPXViewer {
         this.initMap();
         this.initElevationControl();
         this.setupEventListeners();
+        this.setupResizeHandling();
         this.loadFromURL();
         this.loadSampleGPX();
     }
 
     initMap() {
-        this.map = L.map('map').setView([50.0, 5.0], 5);
+        const mapDiv = document.getElementById("map");
+        this.map = L.map(mapDiv).setView([50.0, 5.0], 5);
         
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
-        }).addTo(this.map);
+        // Setup ResizeObserver for the map element
+        const resizeObserver = new ResizeObserver(() => {
+            this.map.invalidateSize();
+        });
+        resizeObserver.observe(mapDiv);
+        
+        // Define tile layers
+        this.tileLayers = {
+            osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }),
+            cyclosm: L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+                attribution: '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases" title="CyclOSM - Open Bicycle render">CyclOSM</a> | Map data: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 20
+            }),
+            topo: L.tileLayer('https://api.topotresc.com/tiles/{z}/{x}/{y}', {
+                attribution: 'Map data: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: © <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+                maxZoom: 17
+            })
+        };
+        
+        // Add default layer
+        this.currentLayer = 'osm';
+        this.tileLayers[this.currentLayer].addTo(this.map);
+    }
+
+    switchMapLayer(layerKey) {
+        if (this.tileLayers[layerKey] && layerKey !== this.currentLayer) {
+            // Remove current layer
+            this.map.removeLayer(this.tileLayers[this.currentLayer]);
+            
+            // Add new layer
+            this.tileLayers[layerKey].addTo(this.map);
+            
+            // Update current layer
+            this.currentLayer = layerKey;
+        }
+    }
+
+    updateLayerButtons(activeLayer) {
+        const layerButtons = document.querySelectorAll('.layer-button');
+        layerButtons.forEach(button => {
+            if (button.dataset.layer === activeLayer) {
+                button.classList.add('active');
+            } else {
+                button.classList.remove('active');
+            }
+        });
     }
 
     initElevationControl() {
@@ -37,6 +92,9 @@ class GPXViewer {
             closeBtn: false,
             distanceMarkers: true,
             hotline: true,
+            slope: true,
+            // distance: "summary",
+            // altitude: "summary",
         });
         
 
@@ -80,12 +138,21 @@ class GPXViewer {
         this.elevationControl.addTo(this.map);
 
         // Setup event listeners for elevation control
-        this.elevationControl.on('eledata_loaded', (e) => {
-            const track = e.layer;
-            if (track) {
-                this.currentGPXLayer = track;
-                this.map.fitBounds(track.getBounds(), { padding: [20, 20] });
+        this.elevationControl.on('eledata_loaded', ({layer, name, track_info}) => {
+            console.log('eledata_loaded event fired');
+            console.log('layer:', layer);
+            console.log('name:', name);
+            console.log('track_info:', track_info);
+            
+            if (layer) {
+                this.currentGPXLayer = layer;
+                this.currentTrackInfo = track_info; // Store track_info for later use
+                this.currentTrackName = name; // Store track name for header
+                
+                this.map.fitBounds(layer.getBounds(), { padding: [20, 20] });
                 this.setupDownloadLink();
+                this.updateTrackInfo();
+                // Don't automatically show elevation panel - keep it closed by default
             }
         });
     }
@@ -116,6 +183,23 @@ class GPXViewer {
         
         const copyUrlButton = document.getElementById('copy-url');
         copyUrlButton.addEventListener('click', () => this.copyURL());
+        
+        // Elevation panel event listeners
+        const elevationToggleButton = document.getElementById('toggle-elevation-panel');
+        if (elevationToggleButton) {
+            elevationToggleButton.addEventListener('click', () => this.toggleElevationPanel());
+        }
+        
+        
+        // Layer switching event listeners
+        const layerButtons = document.querySelectorAll('.layer-button');
+        layerButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const layerKey = e.target.dataset.layer;
+                this.switchMapLayer(layerKey);
+                this.updateLayerButtons(layerKey);
+            });
+        });
         
         window.addEventListener('hashchange', () => this.loadFromURL());
     }
@@ -338,6 +422,106 @@ class GPXViewer {
         }
     }
 
+    updateTrackInfo() {
+        const trackStatsElement = document.getElementById('track-stats');
+        const trackHeaderTitle = document.querySelector('.track-info-header h3');
+        
+        console.log('updateTrackInfo called');
+        console.log('currentTrackInfo:', this.currentTrackInfo);
+        console.log('currentTrackName:', this.currentTrackName);
+        
+        // Update header title
+        if (trackHeaderTitle) {
+            const displayName = this.currentTrackName || this.currentTrackInfo?.name || 'Track Information';
+            trackHeaderTitle.textContent = displayName;
+        }
+        
+        if (!trackStatsElement) {
+            console.log('trackStatsElement not found');
+            return;
+        }
+        
+        if (!this.currentTrackInfo) {
+            console.log('No track info available yet');
+            trackStatsElement.innerHTML = '<div class="track-stat"><span class="stat-label">Loading...</span><span class="stat-value">Please wait</span></div>';
+            return;
+        }
+
+        const trackInfo = this.currentTrackInfo;
+        console.log('Full track info object:', trackInfo);
+        console.log('Available properties:', Object.keys(trackInfo));
+        
+        // Format distance
+        const formatDistance = (meters) => {
+            if (meters >= 1000) {
+                return `${(meters / 1000).toFixed(2)} km`;
+            }
+            return `${Math.round(meters)} m`;
+        };
+
+        // Format elevation
+        const formatElevation = (meters) => {
+            return `${Math.round(meters)} m`;
+        };
+
+        // Format time if available
+        const formatTime = (seconds) => {
+            if (!seconds || isNaN(seconds)) return 'N/A';
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes}m ${secs}s`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${secs}s`;
+            }
+            return `${secs}s`;
+        };
+
+        // Create track statistics HTML using correct property names
+        const statsHTML = `
+            <div class="track-stat">
+                <span class="stat-label">Distance:</span>
+                <span class="stat-value">${formatDistance((trackInfo.distance || 0) * 1000)}</span>
+            </div>
+            <div class="track-stat">
+                <span class="stat-label">Elevation Gain:</span>
+                <span class="stat-value">${formatElevation(trackInfo.ascent || 0)}</span>
+            </div>
+            <div class="track-stat">
+                <span class="stat-label">Elevation Loss:</span>
+                <span class="stat-value">${formatElevation(trackInfo.descent || 0)}</span>
+            </div>
+            <div class="track-stat">
+                <span class="stat-label">Min Elevation:</span>
+                <span class="stat-value">${formatElevation(trackInfo.elevation_min || 0)}</span>
+            </div>
+            <div class="track-stat">
+                <span class="stat-label">Max Elevation:</span>
+                <span class="stat-value">${formatElevation(trackInfo.elevation_max || 0)}</span>
+            </div>
+            <div class="track-stat">
+                <span class="stat-label">Avg Elevation:</span>
+                <span class="stat-value">${formatElevation(trackInfo.elevation_avg || 0)}</span>
+            </div>
+            <div class="track-stat">
+                <span class="stat-label">Avg Slope:</span>
+                <span class="stat-value">${(trackInfo.slope_avg || 0).toFixed(1)}%</span>
+            </div>
+            <div class="track-stat">
+                <span class="stat-label">Max Slope:</span>
+                <span class="stat-value">${(trackInfo.slope_max || 0).toFixed(1)}%</span>
+            </div>
+            <div class="track-stat">
+                <span class="stat-label">Min Slope:</span>
+                <span class="stat-value">${(trackInfo.slope_min || 0).toFixed(1)}%</span>
+            </div>
+        `;
+
+        trackStatsElement.innerHTML = statsHTML;
+    }
+
     setupChartResize() {
         const container = document.getElementById('elevation-chart');
         if (!container) return;
@@ -353,9 +537,7 @@ class GPXViewer {
                 if (width > 0 && height > 0 && this.elevationControl && this.elevationControl._chart) {
                     // Debounce resize calls
                     clearTimeout(this.resizeTimeout);
-                    this.resizeTimeout = setTimeout(() => {
-                        this.resizeChart();
-                    }, 0);
+                    this.resizeChart();
                 }
             }
         });
@@ -366,13 +548,50 @@ class GPXViewer {
         this.resizeChart()
     }
 
+    toggleElevationPanel() {
+        if (this.elevationPanelVisible) {
+            this.hideElevationPanel();
+        } else {
+            this.showElevationPanel();
+        }
+    }
+    
+    showElevationPanel() {
+        const appContainer = document.querySelector('.app-container');
+        const elevationPanel = document.getElementById('elevation-panel');
+        const toggleButton = document.getElementById('toggle-elevation-panel');
+        
+        // Set the saved height
+        elevationPanel.style.height = this.elevationPanelHeight;
+        
+        elevationPanel.classList.remove('hidden');
+        appContainer.classList.add('elevation-shown');
+        toggleButton.classList.add('active');
+        this.elevationPanelVisible = true;
+        
+        // Re-setup resize handling after panel is visible
+        // This ensures the resize handle is properly interactive
+        setTimeout(() => {
+            this.setupResizeHandling();
+        }, 100);
+    }
+    
+    hideElevationPanel() {
+        const appContainer = document.querySelector('.app-container');
+        const elevationPanel = document.getElementById('elevation-panel');
+        const toggleButton = document.getElementById('toggle-elevation-panel');
+        
+        elevationPanel.classList.add('hidden');
+        appContainer.classList.remove('elevation-shown');
+        toggleButton.classList.remove('active');
+        this.elevationPanelVisible = false;
+    }
+
     resizeChart() {
         if (!this.elevationControl) return;
 
         const container = document.getElementById('elevation-chart');
         if (!container) return;
-
-
 
         const rect = container.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
@@ -385,6 +604,90 @@ class GPXViewer {
             // Use the plugin's built-in redraw method
             this.elevationControl.redraw();
         }
+    }
+
+    loadPanelHeight() {
+        const saved = localStorage.getItem('elevationPanelHeight');
+        return saved || '20vh';
+    }
+
+    savePanelHeight(height) {
+        localStorage.setItem('elevationPanelHeight', height);
+        this.elevationPanelHeight = height;
+    }
+
+    setupResizeHandling() {
+        const resizeHandle = document.querySelector('.elevation-panel-resize-handle');
+        const elevationPanel = document.getElementById('elevation-panel');
+        
+        if (!resizeHandle || !elevationPanel) {
+            return;
+        }
+
+        // Remove existing event listeners to prevent duplicates
+        if (this.resizeHandlers) {
+            resizeHandle.removeEventListener('mousedown', this.resizeHandlers.mouseDown);
+        }
+
+        let startY = 0;
+        let startHeight = 0;
+
+        const handleMouseDown = (e) => {
+            this.isResizing = true;
+            startY = e.clientY;
+            startHeight = parseInt(window.getComputedStyle(elevationPanel).height, 10);
+            
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            
+            // Prevent text selection during resize
+            document.body.style.userSelect = 'none';
+            
+            // Prevent default to avoid any conflicts
+            e.preventDefault();
+        };
+
+        const handleMouseMove = (e) => {
+            if (!this.isResizing) return;
+            
+            const deltaY = startY - e.clientY; // Inverted because we're resizing from top
+            const newHeight = startHeight + deltaY;
+            
+            // Apply constraints
+            const minHeight = 200;
+            const maxHeight = window.innerHeight * 0.8;
+            const constrainedHeight = Math.max(minHeight, Math.min(newHeight, maxHeight));
+            
+            elevationPanel.style.height = constrainedHeight + 'px';
+            
+            // Prevent default to avoid any conflicts
+            e.preventDefault();
+        };
+
+        const handleMouseUp = (e) => {
+            if (!this.isResizing) return;
+            
+            this.isResizing = false;
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            
+            // Re-enable text selection
+            document.body.style.userSelect = '';
+            
+            // Save the new height
+            const currentHeight = elevationPanel.style.height;
+            this.savePanelHeight(currentHeight);
+            
+            // Prevent default to avoid any conflicts
+            e.preventDefault();
+        };
+
+        // Store handlers for cleanup
+        this.resizeHandlers = {
+            mouseDown: handleMouseDown
+        };
+
+        resizeHandle.addEventListener('mousedown', handleMouseDown);
     }
 }
 

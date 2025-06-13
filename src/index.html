@@ -12,29 +12,53 @@
     <link rel="apple-touch-icon" href="favicon-32x32.png">
     
     <!-- Bundled CSS -->
-    <link rel="stylesheet" href="dist/bundle.css" />
+    <link rel="stylesheet" href="bundle.css" />
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div id="map"></div>
-    <div id="error-message" class="error hidden"></div>
-    
-    <div class="floating-controls">
-        <input type="file" id="gpx-file" accept=".gpx" />
-        <label for="gpx-file" class="file-button">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14,2 14,8 20,8"></polyline>
-                <line x1="16" y1="13" x2="8" y2="13"></line>
-                <line x1="16" y1="17" x2="8" y2="17"></line>
-                <polyline points="10,9 9,9 8,9"></polyline>
-            </svg>
-        </label>
+    <div class="app-container">
+        <div class="map-container">
+            <div id="map"></div>
+            <div id="error-message" class="error hidden"></div>
+            
+            <div class="floating-controls">
+                <input type="file" id="gpx-file" accept=".gpx" />
+                <label for="gpx-file" class="file-button">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14,2 14,8 20,8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10,9 9,9 8,9"></polyline>
+                    </svg>
+                </label>
+                
+                <button id="toggle-elevation-panel" class="elevation-toggle-button" title="Toggle elevation profile">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3,17 6,11 10,16 16,6 21,10"></polyline>
+                        <polyline points="8,3.2 12,0.7 16,3.2"></polyline>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="layer-controls">
+                <div class="map-layer-controls">
+                    <button id="layer-osm" class="layer-button active" data-layer="osm" title="OpenStreetMap">OSM</button>
+                    <button id="layer-cyclosm" class="layer-button" data-layer="cyclosm" title="CyclOSM - Bicycle map">Cycle</button>
+                    <button id="layer-topo" class="layer-button" data-layer="topo" title="OpenTopoMap - Topographic map">Topo</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="elevation-panel" class="elevation-panel hidden">
+            <div class="elevation-panel-resize-handle"></div>
+            <div id="elevation-chart"></div>
+        </div>
     </div>
     
-    <div id="track-info" class="track-info">
+    <div id="track-info" class="track-info collapsed">
         <div class="track-info-header">
             <h3>Track Information</h3>
             <div class="header-buttons">
@@ -48,9 +72,6 @@
         </div>
         <div class="track-info-content">
             <div id="track-stats" class="track-stats-content"></div>
-            <div id="elevation-profile" class="elevation-profile">
-                <div id="elevation-chart"></div>
-            </div>
         </div>
         <div class="track-info-footer">
             <div class="track-actions">
@@ -74,6 +95,6 @@
     </div>
 
     <!-- Bundled JavaScript -->
-    <script src="dist/bundle.js"></script>
+    <script src="bundle.js"></script>
 </body>
 </html>

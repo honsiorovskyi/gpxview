@@ -5,14 +5,14 @@ import '@raruto/leaflet-elevation/dist/leaflet-elevation.css';
 // Import JS dependencies
 import L from 'leaflet';
 import * as d3 from 'd3';
-import * as togeojson from '@tmcw/togeojson';
+import * as toGeoJSON from '@tmcw/togeojson';
 import 'leaflet-geometryutil';
 import 'leaflet-almostover';
 
 // Make Leaflet, D3, and togeojson globally available
 window.L = L;
 window.d3 = d3;
-window.toGeoJSON = togeojson; // Note: plugin expects toGeoJSON (camelCase)
+window.toGeoJSON = toGeoJSON;
 
 // Import the main elevation module
 import '@raruto/leaflet-elevation';
@@ -82,4 +82,5 @@ L.Control.Elevation.prototype.import = function(src, condition) {
 
 
 // Import and initialize the main app
-import '../app.js';
+import './styles.css';
+import './app.js';
