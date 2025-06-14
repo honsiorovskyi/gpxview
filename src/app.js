@@ -93,8 +93,9 @@ class GPXViewer {
             distanceMarkers: true,
             hotline: true,
             slope: true,
-            // distance: "summary",
-            // altitude: "summary",
+            waypoints: true,
+            wptIcons: true,
+            wptLabels: false,
         });
         
 
