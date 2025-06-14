@@ -17,7 +17,7 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "@raruto/leaflet-elevation": "^2.2.1",
+    "@raruto/leaflet-elevation": "^2.5.1",
     "@tmcw/togeojson": "^7.1.2",
     "d3": "^7.9.0",
     "leaflet": "^1.9.4",

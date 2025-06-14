@@ -9,7 +9,7 @@ module.exports = (env, argv) => {
     entry: './src/index.js',
     output: {
       filename: 'bundle.js',
-      path: path.resolve(__dirname, isDev ? 'dev' : 'dist'),
+      path: path.resolve(__dirname, isDev ? 'dev' : 'docs'),
       clean: true,
     },
     devtool: 'source-map',
@@ -48,11 +48,5 @@ module.exports = (env, argv) => {
         })
       ] : []),
     ],
-    resolve: {
-      alias: {
-        // Help webpack find leaflet images
-        'leaflet$': path.resolve(__dirname, 'node_modules/leaflet/dist/leaflet.js'),
-      },
-    },
   };
 };
